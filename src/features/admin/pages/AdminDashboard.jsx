@@ -1332,7 +1332,7 @@ export default function AdminDashboard() {
             <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
               <p className="font-semibold text-premium-purple-plum">Measurement note</p>
               <p className="mt-3 text-sm text-premium-purple-plum/65">
-                This dashboard is focused on visibility and decision-making. No new AI features were
+                This dashboard is focused on visibility and decision making. No new AI features were
                 introduced in this step.
               </p>
             </div>
