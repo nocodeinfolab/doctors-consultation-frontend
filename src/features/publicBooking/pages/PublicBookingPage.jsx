@@ -1114,8 +1114,15 @@ export default function PublicBookingPage() {
       setPaymentError('This booking is set for offline payment.');
       return;
     }
-
-    if (!canCollectPaymentNow && !confirmation?.consultation_fee_amount) {
+    
+    const payableFee = Number(
+      paymentResult?.amount ??
+      confirmation?.consultation_fee_amount ??
+      selectedConsultationFee ??
+      0
+    );
+    
+    if (confirmation?.payment_required !== false && payableFee <= 0) {
       setPaymentError(
         'Online payment is not available yet because this doctor has not set a valid consultation fee.'
       );
@@ -1618,7 +1625,10 @@ export default function PublicBookingPage() {
                     <p className="mt-2 font-bold text-premium-purple-plum">
                       {paymentCurrency}{' '}
                       {Number(
-                        paymentResult?.amount || selectedConsultationFee || 0
+                        paymentResult?.amount ??
+                        confirmation?.consultation_fee_amount ??
+                        selectedConsultationFee ??
+                        0
                       ).toLocaleString()}
                     </p>
                     <p className="mt-1 text-sm text-premium-purple-plum/60">
