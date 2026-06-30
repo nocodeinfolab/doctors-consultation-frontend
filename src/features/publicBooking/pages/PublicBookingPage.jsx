@@ -442,6 +442,15 @@ export default function PublicBookingPage() {
       bookingSnapshotRef.current = nextSnapshot;
       setPatientBookings(nextBookings);
       setNotifications(nextNotifications);
+      setConfirmation((current) => {
+        if (current) return current; // don't overwrite if already set
+        return nextBookings.find(
+          (b) =>
+            b.payment_required !== false &&
+            b.payment_status !== 'paid' &&
+            !['cancelled', 'completed'].includes(b.status)
+        ) || null;
+      });
     } catch {
       // Keep the booking flow usable even if background activity refresh is temporarily unavailable.
     } finally {
