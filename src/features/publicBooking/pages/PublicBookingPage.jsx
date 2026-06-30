@@ -609,6 +609,14 @@ export default function PublicBookingPage() {
     : bookingForm.visit_type === 'follow_up' && followUpReviewFee > 0
       ? followUpReviewFee
       : initialConsultationFee;
+  console.log({
+      consultationServiceId: bookingForm.consultation_service_id,
+      selectedService,
+      selectedConsultationFee,
+      initialConsultationFee,
+      followUpReviewFee,
+      canCollectPaymentNow
+  });
   const canCollectPaymentNow =
     selectedService?.requires_payment === false
       ? false
