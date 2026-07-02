@@ -235,9 +235,25 @@ function ConsultationsContent() {
       );
   }, [filteredConsultations]);
 
-  // When selection changes, load notes etc. (existing effect logic remains)
-  // I keep the existing effects for loading drafts and saved consultations.
-  // For brevity, I'll include them but not repeat them entirely here; I will keep the code from original.
+  useEffect(() => {
+    const visibleIds = [
+      ...activeConsultations.map((item) => item.id),
+      ...completedFolders.flatMap((folder) =>
+        expandedFolders[folder.id] ? folder.consultations.map((item) => item.id) : []
+      ),
+    ];
+
+    if (!visibleIds.length) {
+      setSelectedId('');
+      return;
+    }
+
+    if (!selectedId || !visibleIds.includes(selectedId)) {
+      setSelectedId(visibleIds[0]);
+    }
+  }, [activeConsultations, completedFolders, expandedFolders, selectedId]);
+
+  const selectedConsultation = filteredConsultations.find((item) => item.id === selectedId) || null;
 
   const fireAndForgetAiTracking = (feature, action, options = {}) => {
     trackAiInteraction({ feature, action, ...options }).catch(() => {});
@@ -315,10 +331,103 @@ function ConsultationsContent() {
   };
 
   useEffect(() => {
-    if (!selectedId) return;
-    // load saved consultation and draft – same as original, kept for brevity.
-    // I will assume these effects are present.
-  }, [selectedId]);
+    if (!selectedConsultation) {
+      return;
+    }
+
+    let active = true;
+
+    const loadSavedConsultation = async () => {
+      try {
+        const existing = await getConsultationByBooking(selectedConsultation.id);
+        if (
+          active &&
+          existing?.doctor_notes &&
+          !notesRef.current[`${selectedConsultation.id}-notes`]
+        ) {
+          setConsultationNotes((current) => {
+            const next = {
+              ...current,
+              [`${selectedConsultation.id}-notes`]: existing.doctor_notes,
+            };
+            notesRef.current = next;
+            return next;
+          });
+        }
+      } catch {
+        // No existing saved consultation yet.
+      }
+    };
+
+    loadSavedConsultation();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedConsultation?.id]);
+
+  useEffect(() => {
+    if (!selectedConsultation?.id) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const loadDraft = async () => {
+      try {
+        const draft = await getConsultationDraft(selectedConsultation.id);
+        if (cancelled) {
+          return;
+        }
+
+        const serverDraft = {
+          raw_notes: draft?.raw_notes || '',
+          outcome_notes: draft?.outcome_notes || '',
+          plan_notes: draft?.plan_notes || '',
+          follow_up_notes: draft?.follow_up_notes || '',
+        };
+        const previousDraft = serverDraftsRef.current[selectedConsultation.id];
+        serverDraftsRef.current = {
+          ...serverDraftsRef.current,
+          [selectedConsultation.id]: serverDraft,
+        };
+
+        setConsultationNotes((current) => {
+          const next = { ...current };
+          const fields = [
+            ['raw', 'raw_notes'],
+            ['outcome', 'outcome_notes'],
+            ['plan', 'plan_notes'],
+            ['notes', 'follow_up_notes'],
+          ];
+
+          fields.forEach(([fieldKey, serverKey]) => {
+            const stateKey = `${selectedConsultation.id}-${fieldKey}`;
+            const currentValue = current[stateKey];
+            const previousServerValue = previousDraft?.[serverKey];
+            const serverValue = serverDraft[serverKey];
+
+            if (currentValue === undefined || currentValue === previousServerValue) {
+              next[stateKey] = serverValue;
+            }
+          });
+
+          notesRef.current = next;
+          return next;
+        });
+      } catch (err) {
+        if (!cancelled) {
+          window.alert(err.message || 'Could not load consultation draft notes');
+        }
+      }
+    };
+
+    loadDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedConsultation?.id]);
 
   const handleGenerateAiNotes = async (booking, mode = 'generate') => {
     if (aiNotesLocked) {
@@ -569,549 +678,449 @@ function ConsultationsContent() {
         </Card>
       </div>
 
-      <Card
-        title="Consultation Workspace"
-        subtitle="Open live visits and archived patient records"
-      >
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
-            <input
-              className="premium-input pl-11"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search consultations or patient records"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['all', 'upcoming', 'in-progress', 'completed'].map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setActiveFilter(filter)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${activeFilter === filter ? 'bg-premium-purple-plum text-white' : 'bg-premium-lilac-light/40 text-premium-purple-plum'}`}
-              >
-                {filter === 'all' ? 'All' : consultationStatusMeta[filter]?.label || filter}
-              </button>
-            ))}
-          </div>
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
+        <Card
+          title="Consultation Workspace"
+          subtitle="Open live visits and archived patient records"
+        >
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
+              <input
+                className="premium-input pl-11"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search consultations or patient records"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['all', 'upcoming', 'in-progress', 'completed'].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setActiveFilter(filter)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${activeFilter === filter ? 'bg-premium-purple-plum text-white' : 'bg-premium-lilac-light/40 text-premium-purple-plum'}`}
+                >
+                  {filter === 'all' ? 'All' : consultationStatusMeta[filter]?.label || filter}
+                </button>
+              ))}
+            </div>
 
-          {filteredConsultations.length === 0 ? (
+            {filteredConsultations.length === 0 ? (
+              <EmptyState
+                icon={Stethoscope}
+                title="No consultations yet"
+                message="Confirmed and completed bookings will automatically form your clinical workflow here."
+              />
+            ) : (
+              <div className="max-h-[680px] space-y-4 overflow-y-auto pr-1">
+                {activeConsultations.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                      Open consultations
+                    </p>
+                    {activeConsultations.map((consultation, index) => (
+                      <button
+                        key={consultation?.id || `consultation-${index}`}
+                        type="button"
+                        onClick={() => setSelectedId(consultation?.id)}
+                        className={`w-full rounded-3xl border p-4 text-left transition-all ${selectedId === consultation?.id ? 'border-premium-purple-plum bg-premium-lilac-light/30 shadow-premium-soft' : 'border-premium-lilac/20 bg-white/70 hover:bg-white'}`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-premium-purple-plum">
+                              {getPatientName(consultation)}
+                            </p>
+                            <p className="text-xs text-premium-purple-plum/55">
+                              {formatDateTime(getConsultationDate(consultation))}
+                            </p>
+                          </div>
+                          <Badge variant={getStatusMeta(consultation).variant}>
+                            {getStatusMeta(consultation).label}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-sm text-premium-purple-plum/70">
+                          {getConsultationReason(consultation)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {completedFolders.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                      Patient records archive
+                    </p>
+                    {completedFolders.map((folder) => {
+                      const isExpanded = Boolean(expandedFolders[folder.id]);
+
+                      return (
+                        <div
+                          key={folder.id}
+                          className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-3"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleFolderToggle(folder)}
+                            className="flex w-full items-center justify-between gap-3 rounded-2xl px-2 py-2 text-left"
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-premium-lilac-light/40 text-premium-purple-plum">
+                                <FolderOpen className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate font-bold text-premium-purple-plum">
+                                  {folder.patient_name}
+                                </p>
+                                <p className="truncate text-xs text-premium-purple-plum/55">
+                                  {folder.patient_email || 'Completed patient record'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge variant="success">
+                                {folder.consultations.length} visit
+                                {folder.consultations.length === 1 ? '' : 's'}
+                              </Badge>
+                              <ChevronDown
+                                className={`h-4 w-4 text-premium-purple-plum/60 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                              />
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-3 space-y-2 border-t border-premium-lilac/15 pt-3">
+                              {folder.consultations.map((consultation) => (
+                                <button
+                                  key={consultation.id}
+                                  type="button"
+                                  onClick={() => setSelectedId(consultation.id)}
+                                  className={`w-full rounded-2xl border p-3 text-left transition-all ${selectedId === consultation.id ? 'border-premium-purple-plum bg-premium-lilac-light/30' : 'border-premium-lilac/15 bg-white hover:bg-premium-pearl-tint/40'}`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-premium-purple-plum">
+                                      {formatDateTime(getConsultationDate(consultation))}
+                                    </p>
+                                    <Badge variant="success">Completed</Badge>
+                                  </div>
+                                  <p className="mt-1 text-sm text-premium-purple-plum/65">
+                                    {getConsultationReason(consultation)}
+                                  </p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card title="Clinical note workspace" subtitle="Notes, outcomes, and next steps">
+          {!selectedConsultation ? (
             <EmptyState
-              icon={Stethoscope}
-              title="No consultations yet"
-              message="Confirmed and completed bookings will automatically form your clinical workflow here."
+              icon={ClipboardCheck}
+              title="Select a consultation"
+              message="Open any live consultation or click a patient folder to expand completed visits."
             />
           ) : (
-            <div className="max-h-[680px] space-y-4 overflow-y-auto pr-1">
-              {activeConsultations.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-                    Open consultations
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <Avatar
+                  name={getPatientName(selectedConsultation)}
+                  className="h-12 w-12 text-sm"
+                  textClassName="text-sm"
+                />
+                <div>
+                  <p className="font-bold text-premium-purple-plum">
+                    {getPatientName(selectedConsultation)}
                   </p>
-                  {activeConsultations.map((consultation) => {
-                    const isSelected = selectedId === consultation.id;
-                    return (
-                      <div
-                        key={consultation.id}
-                        className={`rounded-3xl border p-4 transition-all ${
-                          isSelected
-                            ? 'border-premium-purple-plum bg-premium-lilac-light/30 shadow-premium-soft'
-                            : 'border-premium-lilac/20 bg-white/70 hover:bg-white'
-                        }`}
-                      >
-                        {/* Header – click to select/deselect */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedId(isSelected ? '' : consultation.id)}
-                          className="w-full text-left"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-premium-purple-plum">
-                                {getPatientName(consultation)}
-                              </p>
-                              <p className="text-xs text-premium-purple-plum/55">
-                                {formatDateTime(getConsultationDate(consultation))}
-                              </p>
-                            </div>
-                            <Badge variant={getStatusMeta(consultation).variant}>
-                              {getStatusMeta(consultation).label}
-                            </Badge>
-                          </div>
-                          <p className="mt-2 text-sm text-premium-purple-plum/70">
-                            {getConsultationReason(consultation)}
-                          </p>
-                        </button>
+                  <p className="text-sm text-premium-purple-plum/60">
+                    {getPatientEmail(selectedConsultation) || 'Email unavailable'}
+                  </p>
+                </div>
+                <div className="ml-auto">
+                  <Badge variant={getStatusMeta(selectedConsultation).variant}>
+                    {getStatusMeta(selectedConsultation).label}
+                  </Badge>
+                </div>
+              </div>
 
-                        {/* Details – shown inside the same card when selected */}
-                        {isSelected && (
-                          <div className="mt-4 space-y-5 border-t border-premium-lilac/20 pt-4">
-                            {/* Patient info */}
-                            <div className="flex items-center gap-3">
-                              <Avatar
-                                name={getPatientName(consultation)}
-                                className="h-12 w-12 text-sm"
-                                textClassName="text-sm"
-                              />
-                              <div>
-                                <p className="font-bold text-premium-purple-plum">
-                                  {getPatientName(consultation)}
-                                </p>
-                                <p className="text-sm text-premium-purple-plum/60">
-                                  {getPatientEmail(consultation) || 'Email unavailable'}
-                                </p>
-                              </div>
-                              <div className="ml-auto">
-                                <Badge variant={getStatusMeta(consultation).variant}>
-                                  {getStatusMeta(consultation).label}
-                                </Badge>
-                              </div>
-                            </div>
+              <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
+                <p className="text-sm font-bold text-premium-purple-plum">Consultation reason</p>
+                <p className="mt-2 text-sm text-premium-purple-plum/70">
+                  {getConsultationReason(selectedConsultation) || 'No reason recorded.'}
+                </p>
+                <p className="mt-3 text-xs text-premium-purple-plum/55">
+                  Scheduled {formatDateTime(getConsultationDate(selectedConsultation))} ·{' '}
+                  {formatRelativeTime(getConsultationDate(selectedConsultation))}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={
+                      busyId === selectedConsultation.id ||
+                      Boolean(getMessagingUnavailableReason(selectedConsultation))
+                    }
+                    onClick={() => handleMessagePatient(selectedConsultation)}
+                  >
+                    <MessageCircle className="h-4 w-4" />{' '}
+                    {busyId === selectedConsultation.id ? 'Opening...' : 'Message patient'}
+                  </Button>
+                  {getMessagingUnavailableReason(selectedConsultation) && (
+                    <p className="text-sm font-semibold text-premium-purple-plum/60">
+                      {getMessagingUnavailableReason(selectedConsultation)}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-                            {/* Consultation reason */}
-                            <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
-                              <p className="text-sm font-bold text-premium-purple-plum">Consultation reason</p>
-                              <p className="mt-2 text-sm text-premium-purple-plum/70">
-                                {getConsultationReason(consultation) || 'No reason recorded.'}
-                              </p>
-                              <p className="mt-3 text-xs text-premium-purple-plum/55">
-                                Scheduled {formatDateTime(getConsultationDate(consultation))} ·{' '}
-                                {formatRelativeTime(getConsultationDate(consultation))}
-                              </p>
-                              <div className="mt-4 flex flex-wrap items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="secondary"
-                                  disabled={
-                                    busyId === consultation.id ||
-                                    Boolean(getMessagingUnavailableReason(consultation))
-                                  }
-                                  onClick={() => handleMessagePatient(consultation)}
-                                >
-                                  <MessageCircle className="h-4 w-4" />{' '}
-                                  {busyId === consultation.id ? 'Opening...' : 'Message patient'}
-                                </Button>
-                                {getMessagingUnavailableReason(consultation) && (
-                                  <p className="text-sm font-semibold text-premium-purple-plum/60">
-                                    {getMessagingUnavailableReason(consultation)}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+              <div className="space-y-3 rounded-3xl border border-premium-lilac/20 bg-premium-pearl-tint/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-premium-purple-plum">
+                      AI documentation helper
+                    </p>
+                    <p className="text-sm text-premium-purple-plum/65">
+                      Short, editable suggestions only. Nothing is saved until you approve it.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant={
+                        aiNotesLocked
+                          ? doctorUser?.subscription_status === 'suspended'
+                            ? 'warning'
+                            : 'premium'
+                          : 'success'
+                      }
+                    >
+                      {aiNotesLocked ? 'Locked on this plan' : 'Included in your plan'}
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        handleGenerateAiNotes(
+                          selectedConsultation,
+                          aiDraftMeta[selectedConsultation.id]?.generated
+                            ? 'regenerate'
+                            : 'generate'
+                        )
+                      }
+                      disabled={
+                        aiNotesLocked ||
+                        aiBusyId === selectedConsultation.id ||
+                        busyId === selectedConsultation.id
+                      }
+                    >
+                      <Sparkles className="h-4 w-4" />{' '}
+                      {aiNotesLocked
+                        ? 'Upgrade required'
+                        : aiBusyId === selectedConsultation.id
+                          ? 'Generating...'
+                          : aiDraftMeta[selectedConsultation.id]?.generated
+                            ? 'Regenerate'
+                            : 'Generate note'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleIgnoreAiNotes(selectedConsultation)}
+                    >
+                      Work manually
+                    </Button>
+                  </div>
+                </div>
+                {aiNotesLocked && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    {aiNotesMessage}
+                  </div>
+                )}
+              </div>
 
-                            {/* AI helper */}
-                            <div className="space-y-3 rounded-3xl border border-premium-lilac/20 bg-premium-pearl-tint/40 p-4">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-semibold text-premium-purple-plum">
-                                    AI documentation helper
-                                  </p>
-                                  <p className="text-sm text-premium-purple-plum/65">
-                                    Short, editable suggestions only. Nothing is saved until you approve it.
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge
-                                    variant={
-                                      aiNotesLocked
-                                        ? doctorUser?.subscription_status === 'suspended'
-                                          ? 'warning'
-                                          : 'premium'
-                                        : 'success'
-                                    }
-                                  >
-                                    {aiNotesLocked ? 'Locked on this plan' : 'Included in your plan'}
-                                  </Badge>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() =>
-                                      handleGenerateAiNotes(
-                                        consultation,
-                                        aiDraftMeta[consultation.id]?.generated
-                                          ? 'regenerate'
-                                          : 'generate'
-                                      )
-                                    }
-                                    disabled={
-                                      aiNotesLocked ||
-                                      aiBusyId === consultation.id ||
-                                      busyId === consultation.id
-                                    }
-                                  >
-                                    <Sparkles className="h-4 w-4" />{' '}
-                                    {aiNotesLocked
-                                      ? 'Upgrade required'
-                                      : aiBusyId === consultation.id
-                                        ? 'Generating...'
-                                        : aiDraftMeta[consultation.id]?.generated
-                                          ? 'Regenerate'
-                                          : 'Generate note'}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => handleIgnoreAiNotes(consultation)}
-                                  >
-                                    Work manually
-                                  </Button>
-                                </div>
-                              </div>
-                              {aiNotesLocked && (
-                                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                  {aiNotesMessage}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Notes sections */}
-                            {getConsultationStatus(consultation) === 'completed' ? (
-                              <div className="space-y-4">
-                                {consultationNotes[`${consultation.id}-raw`] && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                      <h3 className="font-semibold text-premium-purple-plum">History</h3>
-                                    </div>
-                                    <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                      <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                        {consultationNotes[`${consultation.id}-raw`]}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                                {consultationNotes[`${consultation.id}-outcome`] && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                      <h3 className="font-semibold text-premium-purple-plum">Examination Findings</h3>
-                                    </div>
-                                    <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                      <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                        {consultationNotes[`${consultation.id}-outcome`]}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                                {consultationNotes[`${consultation.id}-plan`] && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                      <h3 className="font-semibold text-premium-purple-plum">Diagnosis</h3>
-                                    </div>
-                                    <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                      <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                        {consultationNotes[`${consultation.id}-plan`]}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                                {consultationNotes[`${consultation.id}-notes`] && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                      <h3 className="font-semibold text-premium-purple-plum">Plan</h3>
-                                    </div>
-                                    <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                      <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                        {consultationNotes[`${consultation.id}-notes`]}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="space-y-4">
-                                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-800">
-                                  <p className="font-semibold">Protected Health Information (PHI)</p>
-                                  <p className="mt-1">
-                                    This workspace contains sensitive patient data. Ensure notes are accurate and
-                                    only shared with authorized personnel.
-                                  </p>
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                    <h3 className="font-semibold text-premium-purple-plum">History</h3>
-                                  </div>
-                                  <textarea
-                                    className="premium-input min-h-[100px]"
-                                    placeholder="Patient history, presenting complaint, and relevant background information"
-                                    value={consultationNotes[`${consultation.id}-raw`] || ''}
-                                    onChange={(event) =>
-                                      updateNoteField(consultation.id, 'raw', event.target.value)
-                                    }
-                                  />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                    <h3 className="font-semibold text-premium-purple-plum">Examination Findings</h3>
-                                  </div>
-                                  <textarea
-                                    className="premium-input min-h-[120px]"
-                                    placeholder="Physical examination findings, vital signs, and clinical observations"
-                                    value={consultationNotes[`${consultation.id}-outcome`] || ''}
-                                    onChange={(event) =>
-                                      updateNoteField(consultation.id, 'outcome', event.target.value)
-                                    }
-                                  />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                    <h3 className="font-semibold text-premium-purple-plum">Diagnosis</h3>
-                                  </div>
-                                  <textarea
-                                    className="premium-input min-h-[120px]"
-                                    placeholder="Clinical diagnosis, differential diagnosis, and reasoning"
-                                    value={consultationNotes[`${consultation.id}-plan`] || ''}
-                                    onChange={(event) =>
-                                      updateNoteField(consultation.id, 'plan', event.target.value)
-                                    }
-                                  />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                    <h3 className="font-semibold text-premium-purple-plum">Plan</h3>
-                                  </div>
-                                  <textarea
-                                    className="premium-input min-h-[120px]"
-                                    placeholder="Treatment plan, medications, follow-up instructions, and patient education"
-                                    value={consultationNotes[`${consultation.id}-notes`] || ''}
-                                    onChange={(event) =>
-                                      updateNoteField(consultation.id, 'notes', event.target.value)
-                                    }
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Attachments placeholder */}
-                            <div className="rounded-3xl border border-dashed border-premium-lilac/30 bg-premium-pearl-tint/40 p-4">
-                              <p className="text-sm font-bold text-premium-purple-plum">Attach files</p>
-                              <p className="mt-2 text-sm text-premium-purple-plum/60">
-                                Clinical attachments will appear here when the dedicated consultation attach flow
-                                is connected.
-                              </p>
-                            </div>
-
-                            {/* Action buttons */}
-                            <div className="flex flex-wrap gap-3">
-                              <Button
-                                disabled={
-                                  busyId === consultation.id ||
-                                  getConsultationStatus(consultation) === 'completed'
-                                }
-                                onClick={() => handleSaveConsultationNotes(consultation)}
-                              >
-                                <CheckCircle2 className="h-4 w-4" />{' '}
-                                {busyId === consultation.id ? 'Saving...' : 'Confirm note'}
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                disabled={
-                                  busyId === consultation.id ||
-                                  getConsultationStatus(consultation) === 'completed'
-                                }
-                                onClick={() => handleComplete(consultation.id)}
-                              >
-                                <CheckCircle2 className="h-4 w-4" /> Complete consultation
-                              </Button>
-                            </div>
-                          </div>
-                        )}
+              {getConsultationStatus(selectedConsultation) === 'completed' ? (
+                <div className="space-y-4">
+                  {/* Display structured saved notes for completed consultations */}
+                  {consultationNotes[`${selectedConsultation.id}-raw`] && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                        <h3 className="font-semibold text-premium-purple-plum">History</h3>
                       </div>
-                    );
-                  })}
+                      <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                        <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
+                          {consultationNotes[`${selectedConsultation.id}-raw`]}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {consultationNotes[`${selectedConsultation.id}-outcome`] && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                        <h3 className="font-semibold text-premium-purple-plum">
+                          Examination Findings
+                        </h3>
+                      </div>
+                      <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                        <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
+                          {consultationNotes[`${selectedConsultation.id}-outcome`]}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {consultationNotes[`${selectedConsultation.id}-plan`] && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                        <h3 className="font-semibold text-premium-purple-plum">Diagnosis</h3>
+                      </div>
+                      <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                        <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
+                          {consultationNotes[`${selectedConsultation.id}-plan`]}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {consultationNotes[`${selectedConsultation.id}-notes`] && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                        <h3 className="font-semibold text-premium-purple-plum">Plan</h3>
+                      </div>
+                      <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                        <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
+                          {consultationNotes[`${selectedConsultation.id}-notes`]}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-800">
+                    <p className="font-semibold">Protected Health Information (PHI)</p>
+                    <p className="mt-1">
+                      This workspace contains sensitive patient data. Ensure notes are accurate and
+                      only shared with authorized personnel.
+                    </p>
+                  </div>
+
+                  {/* History Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                      <h3 className="font-semibold text-premium-purple-plum">History</h3>
+                    </div>
+                    <textarea
+                      className="premium-input min-h-[100px]"
+                      placeholder="Patient history, presenting complaint, and relevant background information"
+                      value={consultationNotes[`${selectedConsultation.id}-raw`] || ''}
+                      onChange={(event) =>
+                        updateNoteField(selectedConsultation.id, 'raw', event.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Examination Findings Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                      <h3 className="font-semibold text-premium-purple-plum">
+                        Examination Findings
+                      </h3>
+                    </div>
+                    <textarea
+                      className="premium-input min-h-[120px]"
+                      placeholder="Physical examination findings, vital signs, and clinical observations"
+                      value={consultationNotes[`${selectedConsultation.id}-outcome`] || ''}
+                      onChange={(event) =>
+                        updateNoteField(selectedConsultation.id, 'outcome', event.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Diagnosis Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                      <h3 className="font-semibold text-premium-purple-plum">Diagnosis</h3>
+                    </div>
+                    <textarea
+                      className="premium-input min-h-[120px]"
+                      placeholder="Clinical diagnosis, differential diagnosis, and reasoning"
+                      value={consultationNotes[`${selectedConsultation.id}-plan`] || ''}
+                      onChange={(event) =>
+                        updateNoteField(selectedConsultation.id, 'plan', event.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Plan Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
+                      <h3 className="font-semibold text-premium-purple-plum">Plan</h3>
+                    </div>
+                    <textarea
+                      className="premium-input min-h-[120px]"
+                      placeholder="Treatment plan, medications, follow-up instructions, and patient education"
+                      value={consultationNotes[`${selectedConsultation.id}-notes`] || ''}
+                      onChange={(event) =>
+                        updateNoteField(selectedConsultation.id, 'notes', event.target.value)
+                      }
+                    />
+                  </div>
                 </div>
               )}
 
-              {completedFolders.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-                    Patient records archive
-                  </p>
-                  {completedFolders.map((folder) => {
-                    const isExpanded = Boolean(expandedFolders[folder.id]);
+              <div className="rounded-3xl border border-dashed border-premium-lilac/30 bg-premium-pearl-tint/40 p-4">
+                <p className="text-sm font-bold text-premium-purple-plum">Attach files</p>
+                <p className="mt-2 text-sm text-premium-purple-plum/60">
+                  Clinical attachments will appear here when the dedicated consultation attach flow
+                  is connected.
+                </p>
+              </div>
 
-                    return (
-                      <div
-                        key={folder.id}
-                        className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-3"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleFolderToggle(folder)}
-                          className="flex w-full items-center justify-between gap-3 rounded-2xl px-2 py-2 text-left"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-premium-lilac-light/40 text-premium-purple-plum">
-                              <FolderOpen className="h-5 w-5" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate font-bold text-premium-purple-plum">
-                                {folder.patient_name}
-                              </p>
-                              <p className="truncate text-xs text-premium-purple-plum/55">
-                                {folder.patient_email || 'Completed patient record'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <Badge variant="success">
-                              {folder.consultations.length} visit
-                              {folder.consultations.length === 1 ? '' : 's'}
-                            </Badge>
-                            <ChevronDown
-                              className={`h-4 w-4 text-premium-purple-plum/60 transition-transform ${
-                                isExpanded ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="mt-3 space-y-2 border-t border-premium-lilac/15 pt-3">
-                            {folder.consultations.map((consultation) => {
-                              const isSelected = selectedId === consultation.id;
-                              return (
-                                <div
-                                  key={consultation.id}
-                                  className={`rounded-2xl border p-3 transition-all ${
-                                    isSelected
-                                      ? 'border-premium-purple-plum bg-premium-lilac-light/30'
-                                      : 'border-premium-lilac/15 bg-white hover:bg-premium-pearl-tint/40'
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setSelectedId(
-                                        isSelected ? '' : consultation.id
-                                      )
-                                    }
-                                    className="w-full text-left"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-3">
-                                      <p className="text-sm font-semibold text-premium-purple-plum">
-                                        {formatDateTime(getConsultationDate(consultation))}
-                                      </p>
-                                      <Badge variant="success">Completed</Badge>
-                                    </div>
-                                    <p className="mt-1 text-sm text-premium-purple-plum/65">
-                                      {getConsultationReason(consultation)}
-                                    </p>
-                                  </button>
-
-                                  {isSelected && (
-                                    <div className="mt-4 space-y-5 border-t border-premium-lilac/20 pt-4">
-                                      {/* Same details as above, but for completed – can reuse or just show the notes */}
-                                      {/* For brevity, I'll put the same details structure here, but you can customise */}
-                                      {/* I'll reuse the same structure as above */}
-                                      <div className="flex items-center gap-3">
-                                        <Avatar
-                                          name={getPatientName(consultation)}
-                                          className="h-12 w-12 text-sm"
-                                          textClassName="text-sm"
-                                        />
-                                        <div>
-                                          <p className="font-bold text-premium-purple-plum">
-                                            {getPatientName(consultation)}
-                                          </p>
-                                          <p className="text-sm text-premium-purple-plum/60">
-                                            {getPatientEmail(consultation) || 'Email unavailable'}
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
-                                        <p className="text-sm font-bold text-premium-purple-plum">Consultation reason</p>
-                                        <p className="mt-2 text-sm text-premium-purple-plum/70">
-                                          {getConsultationReason(consultation) || 'No reason recorded.'}
-                                        </p>
-                                      </div>
-
-                                      {/* Completed notes display */}
-                                      <div className="space-y-4">
-                                        {consultationNotes[`${consultation.id}-raw`] && (
-                                          <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                              <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                              <h3 className="font-semibold text-premium-purple-plum">History</h3>
-                                            </div>
-                                            <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                              <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                                {consultationNotes[`${consultation.id}-raw`]}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-                                        {consultationNotes[`${consultation.id}-outcome`] && (
-                                          <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                              <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                              <h3 className="font-semibold text-premium-purple-plum">Examination Findings</h3>
-                                            </div>
-                                            <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                              <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                                {consultationNotes[`${consultation.id}-outcome`]}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-                                        {consultationNotes[`${consultation.id}-plan`] && (
-                                          <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                              <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                              <h3 className="font-semibold text-premium-purple-plum">Diagnosis</h3>
-                                            </div>
-                                            <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                              <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                                {consultationNotes[`${consultation.id}-plan`]}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-                                        {consultationNotes[`${consultation.id}-notes`] && (
-                                          <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                              <div className="h-6 w-1 rounded-full bg-premium-purple-plum"></div>
-                                              <h3 className="font-semibold text-premium-purple-plum">Plan</h3>
-                                            </div>
-                                            <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-                                              <p className="whitespace-pre-wrap text-sm text-premium-purple-plum/70">
-                                                {consultationNotes[`${consultation.id}-notes`]}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  disabled={
+                    busyId === selectedConsultation.id ||
+                    getConsultationStatus(selectedConsultation) === 'completed'
+                  }
+                  onClick={() => handleSaveConsultationNotes(selectedConsultation)}
+                >
+                  <CheckCircle2 className="h-4 w-4" />{' '}
+                  {busyId === selectedConsultation.id ? 'Saving...' : 'Confirm note'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={
+                    busyId === selectedConsultation.id ||
+                    getConsultationStatus(selectedConsultation) === 'completed'
+                  }
+                  onClick={() => handleComplete(selectedConsultation.id)}
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Complete consultation
+                </Button>
+              </div>
             </div>
           )}
-        </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
