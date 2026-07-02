@@ -795,7 +795,11 @@ function ConsultationsContent() {
                                 <button
                                   key={consultation.id}
                                   type="button"
-                                  onClick={() => setSelectedId(consultation.id)}
+                                  onClick={() =>
+                                      setSelectedId(
+                                          selectedId === consultation.id ? '' : consultation.id
+                                      )
+                                  }
                                   className={`w-full rounded-2xl border p-3 text-left transition-all ${selectedId === consultation.id ? 'border-premium-purple-plum bg-premium-lilac-light/30' : 'border-premium-lilac/15 bg-white hover:bg-premium-pearl-tint/40'}`}
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-3">
