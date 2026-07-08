@@ -201,366 +201,6 @@ const BookingSkeleton = () => (
   </div>
 );
 
-// ---------- New component for booking details ----------
-function BookingDetailsPanel({
-  booking,
-  busyId,
-  showRescheduleForm,
-  setShowRescheduleForm,
-  rescheduleForm,
-  setRescheduleForm,
-  showDeclineForm,
-  setShowDeclineForm,
-  declineReason,
-  setDeclineReason,
-  handleConfirmBooking,
-  handleSuggestTimeSubmit,
-  handleDeclineSubmit,
-  handleMessagePatient,
-  handleStatusChange,
-  handleArchiveBooking,
-  bookingNotes,
-  handleNoteChange,
-  getMessagingUnavailableReason,
-}) {
-  const timeline = [
-    {
-      label: 'Request submitted',
-      time: booking.created_at || getBookingDate(booking),
-      helper: 'Patient sent a booking request.',
-    },
-    getBookingStatus(booking) !== 'pending'
-      ? {
-          label: 'Doctor review',
-          time: booking.updated_at || getBookingDate(booking),
-          helper: `Current status is ${bookingStatusMeta[getBookingStatus(booking)]?.label || getBookingStatus(booking)}.`,
-        }
-      : null,
-    getBookingStatus(booking) === 'completed'
-      ? {
-          label: 'Consultation completed',
-          time: booking.updated_at || getBookingDate(booking),
-          helper: 'This visit has been marked as finished.',
-        }
-      : null,
-    getBookingStatus(booking) === 'cancelled'
-      ? {
-          label: 'Booking declined',
-          time: booking.updated_at || getBookingDate(booking),
-          helper: booking.confirmation_note
-            ? `Reason: ${booking.confirmation_note}`
-            : 'The doctor declined this appointment request.',
-        }
-      : null,
-  ].filter(Boolean);
-
-  return (
-    <div className="mt-4 space-y-5 rounded-3xl border border-premium-lilac/20 bg-white/80 p-5 shadow-sm">
-      {/* Patient summary */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Avatar
-          name={getPatientName(booking)}
-          className="h-12 w-12 text-sm"
-          textClassName="text-sm"
-        />
-        <div>
-          <p className="font-bold text-premium-purple-plum">{getPatientName(booking)}</p>
-          <p className="text-sm text-premium-purple-plum/60">{getPatientContact(booking)}</p>
-        </div>
-        <div className="ml-auto">
-          <Badge variant={bookingStatusMeta[getBookingStatus(booking)]?.variant || 'premium'}>
-            {bookingStatusMeta[getBookingStatus(booking)]?.label || getBookingStatus(booking)}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Info cards */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-            Patient preferred time
-          </p>
-          <p className="mt-2 font-semibold text-premium-purple-plum">
-            {formatSafeDateTime(getPatientRequestedTime(booking))}
-          </p>
-          {getDoctorSuggestedTime(booking) && (
-            <p className="mt-2 text-xs font-semibold text-amber-700">
-              Suggested: {formatSafeDateTime(getDoctorSuggestedTime(booking))}
-            </p>
-          )}
-          {getDoctorConfirmedTime(booking) && (
-            <p className="mt-2 text-xs font-semibold text-emerald-700">
-              Confirmed: {formatSafeDateTime(getDoctorConfirmedTime(booking))}
-            </p>
-          )}
-        </div>
-        <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-            Patient WhatsApp
-          </p>
-          <p className="mt-2 font-semibold text-premium-purple-plum">
-            {booking.patient_phone || 'Not provided yet'}
-          </p>
-          {booking.patient_phone && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="mt-3"
-              onClick={() =>
-                window.open(
-                  createWhatsAppHref(booking.patient_phone),
-                  '_blank',
-                  'noopener,noreferrer'
-                )
-              }
-            >
-              Message on WhatsApp
-            </Button>
-          )}
-        </div>
-        <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-            Payment status
-          </p>
-          <p className="mt-2 font-semibold text-premium-purple-plum">
-            {getPaymentStateLabel(booking)}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-            Consultation type
-          </p>
-          <p className="mt-2 font-semibold text-premium-purple-plum">
-            {getConsultationType(booking)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-            Visit category
-          </p>
-          <p className="mt-2 font-semibold text-premium-purple-plum">
-            {getConsultationFeeTypeLabel(booking)}
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-          Reason for visit
-        </p>
-        <p className="mt-2 text-sm text-premium-purple-plum/75">{getBookingReason(booking)}</p>
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-2">
-        {(() => {
-          const messagingUnavailableReason = getMessagingUnavailableReason(booking);
-          return (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={busyId === booking.id || Boolean(messagingUnavailableReason)}
-              onClick={() => handleMessagePatient(booking)}
-            >
-              <MessageCircle className="h-4 w-4" />{' '}
-              {busyId === booking.id ? 'Opening...' : 'Message patient'}
-            </Button>
-          );
-        })()}
-        <Button
-          size="sm"
-          disabled={
-            busyId === booking.id ||
-            ['completed', 'cancelled', 'confirmed'].includes(getBookingStatus(booking)) ||
-            getPaymentStatus(booking) !== 'paid'
-          }
-          onClick={() => handleConfirmBooking(booking)}
-        >
-          <CheckCircle2 className="h-4 w-4" />{' '}
-          {busyId === booking.id
-            ? 'Updating...'
-            : getPaymentStatus(booking) === 'paid'
-              ? 'Confirm appointment'
-              : 'Await payment'}
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={
-            busyId === booking.id ||
-            ['completed', 'cancelled'].includes(getBookingStatus(booking))
-          }
-          onClick={() => setShowRescheduleForm((current) => !current)}
-        >
-          <CalendarDays className="h-4 w-4" />{' '}
-          {showRescheduleForm ? 'Close suggestion' : 'Suggest new time'}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={
-            busyId === booking.id ||
-            ['completed', 'cancelled'].includes(getBookingStatus(booking))
-          }
-          onClick={() => handleStatusChange(booking.id, 'completed')}
-        >
-          Complete consultation
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={
-            busyId === booking.id ||
-            ['completed', 'cancelled'].includes(getBookingStatus(booking))
-          }
-          onClick={() => setShowDeclineForm((current) => !current)}
-        >
-          <XCircle className="h-4 w-4" />{' '}
-          {showDeclineForm ? 'Close decline' : 'Decline booking'}
-        </Button>
-        {getBookingStatus(booking) === 'completed' && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busyId === booking.id}
-            onClick={() => handleArchiveBooking(booking.id)}
-          >
-            <Archive className="h-4 w-4" /> Archive
-          </Button>
-        )}
-        <Link to="/consultations">
-          <Button size="sm" variant="secondary">
-            Open consultation workspace
-          </Button>
-        </Link>
-      </div>
-
-      {getMessagingUnavailableReason(booking) && (
-        <p className="text-sm font-semibold text-premium-purple-plum/60">
-          {getMessagingUnavailableReason(booking)}
-        </p>
-      )}
-
-      {/* Reschedule form */}
-      {showRescheduleForm && !['completed', 'cancelled'].includes(getBookingStatus(booking)) && (
-        <form
-          onSubmit={handleSuggestTimeSubmit}
-          className="space-y-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-4"
-        >
-          <div>
-            <p className="text-sm font-bold text-amber-900">Propose a new appointment time</p>
-            <p className="mt-1 text-sm text-amber-800">
-              If your schedule changes, you can offer the patient a calmer alternative time with a
-              reassuring note.
-            </p>
-          </div>
-          <input
-            type="datetime-local"
-            className="premium-input"
-            value={rescheduleForm.booking_date}
-            onChange={(event) =>
-              setRescheduleForm((current) => ({
-                ...current,
-                booking_date: event.target.value,
-              }))
-            }
-            min={new Date().toISOString().slice(0, 16)}
-            required
-          />
-          <textarea
-            rows="3"
-            className="premium-input min-h-[96px]"
-            placeholder="Optional reassuring note, for example: I’m sorry for the inconvenience. I’m still available to see you and have proposed a new suitable time."
-            value={rescheduleForm.reason}
-            onChange={(event) =>
-              setRescheduleForm((current) => ({ ...current, reason: event.target.value }))
-            }
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setShowRescheduleForm(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busyId === booking.id}>
-              {busyId === booking.id ? 'Sending suggestion...' : 'Suggest new time'}
-            </Button>
-          </div>
-        </form>
-      )}
-
-      {/* Decline form */}
-      {showDeclineForm && !['completed', 'cancelled'].includes(getBookingStatus(booking)) && (
-        <form
-          onSubmit={handleDeclineSubmit}
-          className="space-y-4 rounded-3xl border border-rose-200 bg-rose-50/70 p-4"
-        >
-          <div>
-            <p className="text-sm font-bold text-rose-900">Decline this booking</p>
-            <p className="mt-1 text-sm text-rose-800">
-              Use this only when you cannot take this appointment. The request will be closed and
-              the patient will be notified.
-            </p>
-          </div>
-          <textarea
-            rows="3"
-            className="premium-input min-h-[96px]"
-            placeholder="Optional reason for the patient, for example: I’m not available at this time. Please book another slot."
-            value={declineReason}
-            onChange={(event) => setDeclineReason(event.target.value)}
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setShowDeclineForm(false)}>
-              Keep booking
-            </Button>
-            <Button type="submit" disabled={busyId === booking.id}>
-              {busyId === booking.id ? 'Declining...' : 'Decline booking'}
-            </Button>
-          </div>
-        </form>
-      )}
-
-      {/* Internal notes */}
-      <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
-          Internal notes
-        </p>
-        <textarea
-          rows="5"
-          className="premium-input mt-3 min-h-[140px]"
-          placeholder="Add your internal preparation notes for this patient visit"
-          value={bookingNotes[booking.id] ?? ''}
-          onChange={(event) => handleNoteChange(booking.id, event.target.value)}
-        />
-        <p className="mt-2 text-xs text-premium-purple-plum/50">
-          These notes are saved to your clinic workspace for future reference.
-        </p>
-      </div>
-
-      {/* Timeline */}
-      <div>
-        <p className="mb-3 text-sm font-bold text-premium-purple-plum">Timeline</p>
-        <div className="space-y-3">
-          {timeline.map((item, index) => (
-            <div
-              key={index}
-              className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/40 p-4"
-            >
-              <p className="font-semibold text-premium-purple-plum">{item.label}</p>
-              <p className="mt-1 text-xs text-premium-purple-plum/55">
-                {formatDateTime(item.time)} · {formatRelativeTime(item.time)}
-              </p>
-              <p className="mt-2 text-sm text-premium-purple-plum/70">{item.helper}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-// ---------- End of BookingDetailsPanel ----------
-
 export default function Bookings() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -960,6 +600,39 @@ export default function Bookings() {
     }
   };
 
+  const timeline = selectedBooking
+    ? [
+        {
+          label: 'Request submitted',
+          time: selectedBooking.created_at || getBookingDate(selectedBooking),
+          helper: 'Patient sent a booking request.',
+        },
+        getBookingStatus(selectedBooking) !== 'pending'
+          ? {
+              label: 'Doctor review',
+              time: selectedBooking.updated_at || getBookingDate(selectedBooking),
+              helper: `Current status is ${bookingStatusMeta[getBookingStatus(selectedBooking)]?.label || getBookingStatus(selectedBooking)}.`,
+            }
+          : null,
+        getBookingStatus(selectedBooking) === 'completed'
+          ? {
+              label: 'Consultation completed',
+              time: selectedBooking.updated_at || getBookingDate(selectedBooking),
+              helper: 'This visit has been marked as finished.',
+            }
+          : null,
+        getBookingStatus(selectedBooking) === 'cancelled'
+          ? {
+              label: 'Booking declined',
+              time: selectedBooking.updated_at || getBookingDate(selectedBooking),
+              helper: selectedBooking.confirmation_note
+                ? `Reason: ${selectedBooking.confirmation_note}`
+                : 'The doctor declined this appointment request.',
+            }
+          : null,
+      ].filter(Boolean)
+    : [];
+
   if (loading) {
     return <BookingSkeleton />;
   }
@@ -1053,187 +726,159 @@ export default function Bookings() {
         </Card>
       </div>
 
-      {/* Single column: list + inline details */}
-      <Card
-        title="Consultation Queue"
-        subtitle="Search, filter, and manage your consultation flow"
-      >
-        <div className="space-y-5">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
-              <input
-                className="premium-input pl-11"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by patient, email, booking ID, or reason"
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr]">
+        <Card
+          title="Consultation Queue"
+          subtitle="Search, filter, and manage your consultation flow"
+        >
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 lg:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
+                <input
+                  className="premium-input pl-11"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by patient, email, booking ID, or reason"
+                />
+              </div>
+              <div className="relative min-w-[180px]">
+                <SlidersHorizontal className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
+                <select
+                  className="premium-input pl-11"
+                  value={sortKey}
+                  onChange={(event) => setSortKey(event.target.value)}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="appointment">Appointment date</option>
+                  <option value="status">Status</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {filterOptions.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setActiveFilter(filter.id)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${activeFilter === filter.id ? 'bg-premium-purple-plum text-white' : 'bg-premium-lilac-light/40 text-premium-purple-plum hover:bg-premium-lilac/40'}`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {patientGroups.length === 0 ? (
+              <EmptyState
+                icon={CalendarDays}
+                title={
+                  activeBookings.length === 0 && archivedCompletedCount > 0
+                    ? 'Your active consultation queue is clear.'
+                    : 'No consultations yet.'
+                }
+                message={
+                  activeBookings.length === 0 && archivedCompletedCount > 0
+                    ? 'Archived consultations remain available in patient records.'
+                    : 'Try a different filter or share your live clinic link to bring in new requests.'
+                }
               />
-            </div>
-            <div className="relative min-w-[180px]">
-              <SlidersHorizontal className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-purple-plum/35" />
-              <select
-                className="premium-input pl-11"
-                value={sortKey}
-                onChange={(event) => setSortKey(event.target.value)}
-              >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="appointment">Appointment date</option>
-                <option value="status">Status</option>
-              </select>
-            </div>
-          </div>
+            ) : (
+              <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+                {patientGroups.map((group) => {
+                  const latest = group.latestBooking;
+                  const latestStatus = getBookingStatus(latest);
+                  const status = bookingStatusMeta[latestStatus] || {
+                    variant: 'premium',
+                    label: latestStatus,
+                    helper: 'Status updated',
+                  };
+                  const isExpanded = expandedPatientIds.has(group.id);
+                  const completedInGroup = group.bookings.filter(
+                    (booking) => getBookingStatus(booking) === 'completed'
+                  );
 
-          <div className="flex flex-wrap gap-2">
-            {filterOptions.map((filter) => (
-              <button
-                key={filter.id}
-                type="button"
-                onClick={() => setActiveFilter(filter.id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-all ${activeFilter === filter.id ? 'bg-premium-purple-plum text-white' : 'bg-premium-lilac-light/40 text-premium-purple-plum hover:bg-premium-lilac/40'}`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-
-          {patientGroups.length === 0 ? (
-            <EmptyState
-              icon={CalendarDays}
-              title={
-                activeBookings.length === 0 && archivedCompletedCount > 0
-                  ? 'Your active consultation queue is clear.'
-                  : 'No consultations yet.'
-              }
-              message={
-                activeBookings.length === 0 && archivedCompletedCount > 0
-                  ? 'Archived consultations remain available in patient records.'
-                  : 'Try a different filter or share your live clinic link to bring in new requests.'
-              }
-            />
-          ) : (
-            <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
-              {patientGroups.map((group) => {
-                const latest = group.latestBooking;
-                const latestStatus = getBookingStatus(latest);
-                const status = bookingStatusMeta[latestStatus] || {
-                  variant: 'premium',
-                  label: latestStatus,
-                  helper: 'Status updated',
-                };
-                const isExpanded = expandedPatientIds.has(group.id);
-                const completedInGroup = group.bookings.filter(
-                  (booking) => getBookingStatus(booking) === 'completed'
-                );
-
-                return (
-                  <div key={group.id} className="space-y-2">
-                    {/* Group card */}
-                    <button
-                      type="button"
-                      onClick={() => togglePatientGroup(group)}
-                      className={`w-full rounded-3xl border p-4 text-left transition-all ${
-                        group.bookings.some((booking) => booking.id === selectedId)
-                          ? 'border-premium-purple-plum bg-premium-lilac-light/30 shadow-premium-soft'
-                          : 'border-premium-lilac/20 bg-white/70 hover:bg-white'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <Avatar
-                            name={group.patientName}
-                            className="h-11 w-11 text-sm"
-                            textClassName="text-sm"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-bold text-premium-purple-plum">
-                              {group.patientName}
-                            </p>
-                            <p className="truncate text-xs text-premium-purple-plum/55">
-                              {group.patientContact}
-                            </p>
+                  return (
+                    <div key={group.id} className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => togglePatientGroup(group)}
+                        className={`w-full rounded-3xl border p-4 text-left transition-all ${
+                          group.bookings.some((booking) => booking.id === selectedId)
+                            ? 'border-premium-purple-plum bg-premium-lilac-light/30 shadow-premium-soft'
+                            : 'border-premium-lilac/20 bg-white/70 hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar
+                              name={group.patientName}
+                              className="h-11 w-11 text-sm"
+                              textClassName="text-sm"
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-premium-purple-plum">
+                                {group.patientName}
+                              </p>
+                              <p className="truncate text-xs text-premium-purple-plum/55">
+                                {group.patientContact}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                            <Badge variant="premium">
+                              {group.bookings.length} consult
+                              {group.bookings.length === 1 ? '' : 's'}
+                            </Badge>
+                            {group.bookings.length > 1 && (
+                              <ChevronDown
+                                className={`h-4 w-4 text-premium-purple-plum/55 transition-transform ${
+                                  isExpanded ? 'rotate-180' : ''
+                                }`}
+                              />
+                            )}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                          <Badge variant="premium">
-                            {group.bookings.length} consult
-                            {group.bookings.length === 1 ? '' : 's'}
-                          </Badge>
-                          {group.bookings.length > 1 && (
-                            <ChevronDown
-                              className={`h-4 w-4 text-premium-purple-plum/55 transition-transform ${
-                                isExpanded ? 'rotate-180' : ''
-                              }`}
-                            />
+                        <p className="mt-3 text-sm text-premium-purple-plum/70">
+                          {getBookingReason(latest)}
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-premium-purple-plum/50">
+                          <span>{formatSafeDateTime(getBookingDate(latest))}</span>
+                          {completedInGroup.length > 0 && (
+                            <span>{completedInGroup.length} completed</span>
                           )}
                         </div>
-                      </div>
-                      <p className="mt-3 text-sm text-premium-purple-plum/70">
-                        {getBookingReason(latest)}
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-premium-purple-plum/50">
-                        <span>{formatSafeDateTime(getBookingDate(latest))}</span>
-                        {completedInGroup.length > 0 && (
-                          <span>{completedInGroup.length} completed</span>
-                        )}
-                      </div>
-                    </button>
+                      </button>
 
-                    {completedInGroup.length > 0 && (
-                      <div className="flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busyId === group.id}
-                          onClick={() => handleArchivePatientCompleted(group.id)}
-                        >
-                          <Archive className="h-4 w-4" /> Archive patient completed
-                        </Button>
-                      </div>
-                    )}
+                      {completedInGroup.length > 0 && (
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyId === group.id}
+                            onClick={() => handleArchivePatientCompleted(group.id)}
+                          >
+                            <Archive className="h-4 w-4" /> Archive patient completed
+                          </Button>
+                        </div>
+                      )}
 
-                    {/* Details for the latest booking (if selected) */}
-                    {selectedId === latest.id && (
-                      <BookingDetailsPanel
-                        booking={latest}
-                        busyId={busyId}
-                        showRescheduleForm={showRescheduleForm}
-                        setShowRescheduleForm={setShowRescheduleForm}
-                        rescheduleForm={rescheduleForm}
-                        setRescheduleForm={setRescheduleForm}
-                        showDeclineForm={showDeclineForm}
-                        setShowDeclineForm={setShowDeclineForm}
-                        declineReason={declineReason}
-                        setDeclineReason={setDeclineReason}
-                        handleConfirmBooking={handleConfirmBooking}
-                        handleSuggestTimeSubmit={handleSuggestTimeSubmit}
-                        handleDeclineSubmit={handleDeclineSubmit}
-                        handleMessagePatient={handleMessagePatient}
-                        handleStatusChange={handleStatusChange}
-                        handleArchiveBooking={handleArchiveBooking}
-                        bookingNotes={bookingNotes}
-                        handleNoteChange={handleNoteChange}
-                        getMessagingUnavailableReason={getMessagingUnavailableReason}
-                      />
-                    )}
+                      {group.bookings.length > 1 && isExpanded && (
+                        <div className="ml-5 space-y-2 border-l border-premium-lilac/25 pl-3">
+                          {group.bookings.map((booking) => {
+                            const nestedStatus = getBookingStatus(booking);
+                            const nestedStatusMeta = bookingStatusMeta[nestedStatus] || {
+                              variant: 'premium',
+                              label: nestedStatus,
+                            };
 
-                    {/* Expanded list of older bookings */}
-                    {group.bookings.length > 1 && isExpanded && (
-                      <div className="ml-5 space-y-2 border-l border-premium-lilac/25 pl-3">
-                        {group.bookings.map((booking) => {
-                          const nestedStatus = getBookingStatus(booking);
-                          const nestedStatusMeta = bookingStatusMeta[nestedStatus] || {
-                            variant: 'premium',
-                            label: nestedStatus,
-                          };
-                          const isSelected = selectedId === booking.id;
-
-                          return (
-                            <div key={booking.id}>
+                            return (
                               <div
+                                key={booking.id}
                                 className={`rounded-2xl border p-3 ${
-                                  isSelected
+                                  selectedId === booking.id
                                     ? 'border-premium-purple-plum bg-white shadow-premium-soft'
                                     : 'border-premium-lilac/15 bg-white/65'
                                 }`}
@@ -1303,43 +948,355 @@ export default function Bookings() {
                                   )}
                                 </div>
                               </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
 
-                              {/* Details for this specific booking (if selected) */}
-                              {isSelected && (
-                                <BookingDetailsPanel
-                                  booking={booking}
-                                  busyId={busyId}
-                                  showRescheduleForm={showRescheduleForm}
-                                  setShowRescheduleForm={setShowRescheduleForm}
-                                  rescheduleForm={rescheduleForm}
-                                  setRescheduleForm={setRescheduleForm}
-                                  showDeclineForm={showDeclineForm}
-                                  setShowDeclineForm={setShowDeclineForm}
-                                  declineReason={declineReason}
-                                  setDeclineReason={setDeclineReason}
-                                  handleConfirmBooking={handleConfirmBooking}
-                                  handleSuggestTimeSubmit={handleSuggestTimeSubmit}
-                                  handleDeclineSubmit={handleDeclineSubmit}
-                                  handleMessagePatient={handleMessagePatient}
-                                  handleStatusChange={handleStatusChange}
-                                  handleArchiveBooking={handleArchiveBooking}
-                                  bookingNotes={bookingNotes}
-                                  handleNoteChange={handleNoteChange}
-                                  getMessagingUnavailableReason={getMessagingUnavailableReason}
-                                />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+        <Card title="Booking detail" subtitle="Doctor actions, patient context, and internal notes">
+          {!selectedBooking ? (
+            <EmptyState
+              icon={FileText}
+              title="Select a booking"
+              message="Choose a request from the queue to review the patient details and status timeline."
+            />
+          ) : (
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-premium-lilac/20 bg-white/70 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Avatar
+                    name={getPatientName(selectedBooking)}
+                    className="h-12 w-12 text-sm"
+                    textClassName="text-sm"
+                  />
+                  <div>
+                    <p className="font-bold text-premium-purple-plum">
+                      {getPatientName(selectedBooking)}
+                    </p>
+                    <p className="text-sm text-premium-purple-plum/60">
+                      {getPatientContact(selectedBooking)}
+                    </p>
                   </div>
-                );
-              })}
+                  <div className="ml-auto">
+                    <Badge
+                      variant={
+                        bookingStatusMeta[getBookingStatus(selectedBooking)]?.variant || 'premium'
+                      }
+                    >
+                      {bookingStatusMeta[getBookingStatus(selectedBooking)]?.label ||
+                        getBookingStatus(selectedBooking)}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                    Patient preferred time
+                  </p>
+                  <p className="mt-2 font-semibold text-premium-purple-plum">
+                    {formatSafeDateTime(getPatientRequestedTime(selectedBooking))}
+                  </p>
+                  {getDoctorSuggestedTime(selectedBooking) && (
+                    <p className="mt-2 text-xs font-semibold text-amber-700">
+                      Suggested: {formatSafeDateTime(getDoctorSuggestedTime(selectedBooking))}
+                    </p>
+                  )}
+                  {getDoctorConfirmedTime(selectedBooking) && (
+                    <p className="mt-2 text-xs font-semibold text-emerald-700">
+                      Confirmed: {formatSafeDateTime(getDoctorConfirmedTime(selectedBooking))}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                    Patient WhatsApp
+                  </p>
+                  <p className="mt-2 font-semibold text-premium-purple-plum">
+                    {selectedBooking.patient_phone || 'Not provided yet'}
+                  </p>
+                  {selectedBooking.patient_phone && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() =>
+                        window.open(
+                          createWhatsAppHref(selectedBooking.patient_phone),
+                          '_blank',
+                          'noopener,noreferrer'
+                        )
+                      }
+                    >
+                      Message on WhatsApp
+                    </Button>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                    Payment status
+                  </p>
+                  <p className="mt-2 font-semibold text-premium-purple-plum">
+                    {getPaymentStateLabel(selectedBooking)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                    Consultation type
+                  </p>
+                  <p className="mt-2 font-semibold text-premium-purple-plum">
+                    {getConsultationType(selectedBooking)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-premium-lilac/20 bg-white/75 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                    Visit category
+                  </p>
+                  <p className="mt-2 font-semibold text-premium-purple-plum">
+                    {getConsultationFeeTypeLabel(selectedBooking)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                  Reason for visit
+                </p>
+                <p className="mt-2 text-sm text-premium-purple-plum/75">
+                  {getBookingReason(selectedBooking)}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const messagingUnavailableReason = getMessagingUnavailableReason(selectedBooking);
+                  return (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={
+                        busyId === selectedBooking.id || Boolean(messagingUnavailableReason)
+                      }
+                      onClick={() => handleMessagePatient(selectedBooking)}
+                    >
+                      <MessageCircle className="h-4 w-4" />{' '}
+                      {busyId === selectedBooking.id ? 'Opening...' : 'Message patient'}
+                    </Button>
+                  );
+                })()}
+                <Button
+                  size="sm"
+                  disabled={
+                    busyId === selectedBooking.id ||
+                    ['completed', 'cancelled', 'confirmed'].includes(
+                      getBookingStatus(selectedBooking)
+                    ) ||
+                    getPaymentStatus(selectedBooking) !== 'paid'
+                  }
+                  onClick={() => handleConfirmBooking(selectedBooking)}
+                >
+                  <CheckCircle2 className="h-4 w-4" />{' '}
+                  {busyId === selectedBooking.id
+                    ? 'Updating...'
+                    : getPaymentStatus(selectedBooking) === 'paid'
+                      ? 'Confirm appointment'
+                      : 'Await payment'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={
+                    busyId === selectedBooking.id ||
+                    ['completed', 'cancelled'].includes(getBookingStatus(selectedBooking))
+                  }
+                  onClick={() => setShowRescheduleForm((current) => !current)}
+                >
+                  <CalendarDays className="h-4 w-4" />{' '}
+                  {showRescheduleForm ? 'Close suggestion' : 'Suggest new time'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    busyId === selectedBooking.id ||
+                    ['completed', 'cancelled'].includes(getBookingStatus(selectedBooking))
+                  }
+                  onClick={() => handleStatusChange(selectedBooking.id, 'completed')}
+                >
+                  Complete consultation
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={
+                    busyId === selectedBooking.id ||
+                    ['completed', 'cancelled'].includes(getBookingStatus(selectedBooking))
+                  }
+                  onClick={() => setShowDeclineForm((current) => !current)}
+                >
+                  <XCircle className="h-4 w-4" />{' '}
+                  {showDeclineForm ? 'Close decline' : 'Decline booking'}
+                </Button>
+                {getBookingStatus(selectedBooking) === 'completed' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busyId === selectedBooking.id}
+                    onClick={() => handleArchiveBooking(selectedBooking.id)}
+                  >
+                    <Archive className="h-4 w-4" /> Archive
+                  </Button>
+                )}
+                <Link to="/consultations">
+                  <Button size="sm" variant="secondary">
+                    Open consultation workspace
+                  </Button>
+                </Link>
+              </div>
+
+              {getMessagingUnavailableReason(selectedBooking) && (
+                <p className="text-sm font-semibold text-premium-purple-plum/60">
+                  {getMessagingUnavailableReason(selectedBooking)}
+                </p>
+              )}
+
+              {showRescheduleForm &&
+                !['completed', 'cancelled'].includes(getBookingStatus(selectedBooking)) && (
+                  <form
+                    onSubmit={handleSuggestTimeSubmit}
+                    className="space-y-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-4"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-amber-900">
+                        Propose a new appointment time
+                      </p>
+                      <p className="mt-1 text-sm text-amber-800">
+                        If your schedule changes, you can offer the patient a calmer alternative
+                        time with a reassuring note.
+                      </p>
+                    </div>
+                    <input
+                      type="datetime-local"
+                      className="premium-input"
+                      value={rescheduleForm.booking_date}
+                      onChange={(event) =>
+                        setRescheduleForm((current) => ({
+                          ...current,
+                          booking_date: event.target.value,
+                        }))
+                      }
+                      min={new Date().toISOString().slice(0, 16)}
+                      required
+                    />
+                    <textarea
+                      rows="3"
+                      className="premium-input min-h-[96px]"
+                      placeholder="Optional reassuring note, for example: I’m sorry for the inconvenience. I’m still available to see you and have proposed a new suitable time."
+                      value={rescheduleForm.reason}
+                      onChange={(event) =>
+                        setRescheduleForm((current) => ({ ...current, reason: event.target.value }))
+                      }
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowRescheduleForm(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={busyId === selectedBooking.id}>
+                        {busyId === selectedBooking.id
+                          ? 'Sending suggestion...'
+                          : 'Suggest new time'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+              {showDeclineForm &&
+                !['completed', 'cancelled'].includes(getBookingStatus(selectedBooking)) && (
+                  <form
+                    onSubmit={handleDeclineSubmit}
+                    className="space-y-4 rounded-3xl border border-rose-200 bg-rose-50/70 p-4"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-rose-900">Decline this booking</p>
+                      <p className="mt-1 text-sm text-rose-800">
+                        Use this only when you cannot take this appointment. The request will be
+                        closed and the patient will be notified.
+                      </p>
+                    </div>
+                    <textarea
+                      rows="3"
+                      className="premium-input min-h-[96px]"
+                      placeholder="Optional reason for the patient, for example: I’m not available at this time. Please book another slot."
+                      value={declineReason}
+                      onChange={(event) => setDeclineReason(event.target.value)}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowDeclineForm(false)}
+                      >
+                        Keep booking
+                      </Button>
+                      <Button type="submit" disabled={busyId === selectedBooking.id}>
+                        {busyId === selectedBooking.id ? 'Declining...' : 'Decline booking'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+              <div className="rounded-3xl border border-premium-lilac/20 bg-white/75 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-premium-purple-plum/45">
+                  Internal notes
+                </p>
+                <textarea
+                  rows="5"
+                  className="premium-input mt-3 min-h-[140px]"
+                  placeholder="Add your internal preparation notes for this patient visit"
+                  value={bookingNotes[selectedBooking.id] ?? ''}
+                  onChange={(event) => handleNoteChange(selectedBooking.id, event.target.value)}
+                />
+                <p className="mt-2 text-xs text-premium-purple-plum/50">
+                  These notes are saved to your clinic workspace for future reference.
+                </p>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-bold text-premium-purple-plum">Timeline</p>
+                <div className="space-y-3">
+                  {timeline.map((item, index) => (
+                    <div
+                      key={index}
+                      className="rounded-2xl border border-premium-lilac/20 bg-premium-pearl-tint/40 p-4"
+                    >
+                      <p className="font-semibold text-premium-purple-plum">{item.label}</p>
+                      <p className="mt-1 text-xs text-premium-purple-plum/55">
+                        {formatDateTime(item.time)} · {formatRelativeTime(item.time)}
+                      </p>
+                      <p className="mt-2 text-sm text-premium-purple-plum/70">{item.helper}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
