@@ -23,7 +23,7 @@ const PatientBookingChatPage = lazy(
   () => import('../../features/chat/pages/PatientBookingChatPage')
 );
 const PatientBookings = lazy(
-  () => import('../../features/patientBookings/pages/PatientBookings')
+  () => import('../../features/patientBookings/pages/patientBookings')
 );
 const LegalPage = lazy(() => import('../../features/legal/pages/LegalPage'));
 const NotFound = lazy(() => import('../../features/errors/pages/NotFound'));
