@@ -11,7 +11,10 @@ const getFallbackRouteForRole = (role) => {
     return '/dashboard';
   }
 
-  // Patients do not have a general dashboard in this app.
+  if (role === 'patient') {
+    return '/patient/login';
+  }
+
   return '/login';
 };
 
@@ -20,7 +23,12 @@ export default function ProtectedRoute({ children, allowedRoles = ['doctor', 'ad
   const currentUser = getStoredUser();
 
   if (!isDoctorAuthenticated()) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // A route scoped to patients only (e.g. /patient/bookings) should send a
+    // signed-out visitor to the patient sign-in page, not the doctor/admin
+    // login, which explicitly rejects patient credentials.
+    const signInPath =
+      allowedRoles?.length === 1 && allowedRoles[0] === 'patient' ? '/patient/login' : '/login';
+    return <Navigate to={signInPath} state={{ from: location }} replace />;
   }
 
   if (allowedRoles?.length > 0 && !allowedRoles.includes(currentUser?.role)) {
