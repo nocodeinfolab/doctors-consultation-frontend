@@ -21,6 +21,13 @@ import {
   updateBookingStatus,
 } from '../../../services/api';
 
+// Payment collection is not live yet on the backend (POST /payments isn't
+// implemented). While this is false, actions that normally require
+// payment_status === 'paid' (confirm, messaging) are unlocked so the rest
+// of the flow is testable. Flip to true once Paystack is wired up — the
+// original payment gating below resumes automatically.
+const PAYMENTS_ENABLED = false;
+
 const bookingStatusMeta = {
   pending: { label: 'Pending review', tone: 'warning' },
   pending_confirmation: { label: 'Awaiting confirmation', tone: 'warning' },
@@ -383,7 +390,7 @@ export function mountConsultationQueue(root) {
   function messagingUnavailableReason(booking, doctorUser) {
     if (!booking) return '';
     if (!isMessagingStatusOpen(booking)) return 'Messaging is closed for this booking status.';
-    if (getPaymentRequired(booking) && getPaymentStatus(booking) !== 'paid') return 'Messaging opens after payment is confirmed.';
+    if (PAYMENTS_ENABLED && getPaymentRequired(booking) && getPaymentStatus(booking) !== 'paid') return 'Messaging opens after payment is confirmed.';
     const enabled = Boolean(doctorUser?.subscription_feature_entitlements?.secure_patient_messaging?.enabled);
     if (!enabled) return 'Secure messaging is available on Professional and Premium plans.';
     return '';
@@ -456,7 +463,7 @@ export function mountConsultationQueue(root) {
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" data-action="confirm" ${state.busyId === booking.id || isFinal || status === 'confirmed' || getPaymentStatus(booking) !== 'paid' ? 'disabled' : ''} class="kura-primary-button rounded-lg px-3 py-2 text-xs">Confirm appointment</button>
+        <button type="button" data-action="confirm" ${state.busyId === booking.id || isFinal || status === 'confirmed' || (PAYMENTS_ENABLED && getPaymentStatus(booking) !== 'paid') ? 'disabled' : ''} class="kura-primary-button rounded-lg px-3 py-2 text-xs">Confirm appointment</button>
         <button type="button" data-action="toggle-reschedule" ${state.busyId === booking.id || isFinal ? 'disabled' : ''} class="kura-secondary-button rounded-lg px-3 py-2 text-xs">${state.showRescheduleForm ? 'Close suggestion' : 'Suggest new time'}</button>
         <button type="button" data-action="complete" ${state.busyId === booking.id || isFinal ? 'disabled' : ''} class="kura-secondary-button rounded-lg px-3 py-2 text-xs">Complete consultation</button>
         <button type="button" data-action="message" ${state.busyId === booking.id || Boolean(msgUnavailable) ? 'disabled' : ''} class="kura-secondary-button rounded-lg px-3 py-2 text-xs">Message patient</button>
