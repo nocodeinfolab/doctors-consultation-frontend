@@ -78,6 +78,11 @@ function loadGoogleScript() {
   return googleScriptPromise;
 }
 
+// Payment collection is not live yet on the backend (POST /payments isn't
+// implemented). Flip this to true once Paystack is wired up server-side —
+// nothing else in this file needs to change.
+const PAYMENTS_ENABLED = false;
+
 const STEPS = ['reason', 'account', 'time', 'review', 'confirmed'];
 const STEP_LABELS = {
   reason: 'Reason for visit',
@@ -209,6 +214,7 @@ export function mountPublicBookingPage(root, { token }) {
   }
 
   function canCollectPaymentNow() {
+    if (!PAYMENTS_ENABLED) return false;
     const service = getSelectedService();
     if (service?.requires_payment === false) return false;
     return getSelectedFee() > 0;
@@ -690,6 +696,7 @@ function mountGoogleAuthButton(el, { onCredential, onError }) {
         <div class="col-span-2">
           <p class="text-xs text-premium-purple-plum/50">Consultation fee</p>
           <p class="font-semibold text-premium-purple-plum">${fee > 0 ? escapeHtml(formatCurrency(fee, getDoctor()?.currency)) : 'To be confirmed by the clinic'}</p>
+          ${!PAYMENTS_ENABLED && fee > 0 ? '<p class="mt-1 text-xs text-premium-purple-plum/45">Online payment isn\'t available yet — the clinic will arrange payment with you directly.</p>' : ''}
         </div>
       </div>
 
