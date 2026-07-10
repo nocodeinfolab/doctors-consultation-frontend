@@ -8,7 +8,7 @@
 //   2. Sign in / create account (single active form, not both at once)
 //   3. Visit type + preferred time
 //   4. Review, consent, submit (then redirect to payment if required)
-//   5. Confirmation
+//   5. Confirm
 //
 // Booking history / notifications were intentionally moved out of this flow
 // (agreed simplification) — they belong on their own "my bookings" screen so
