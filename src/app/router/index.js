@@ -22,6 +22,9 @@ const ChatPage = lazy(() => import('../../features/chat/pages/ChatPage'));
 const PatientBookingChatPage = lazy(
   () => import('../../features/chat/pages/PatientBookingChatPage')
 );
+const PatientBookings = lazy(
+  () => import('../../features/patientBookings/pages/PatientBookings')
+);
 const LegalPage = lazy(() => import('../../features/legal/pages/LegalPage'));
 const NotFound = lazy(() => import('../../features/errors/pages/NotFound'));
 
@@ -122,6 +125,13 @@ export const routes = [
     element: ChatPage,
     isPublic: false,
     allowedRoles: ['doctor'],
+  },
+  {
+    path: '/patient/bookings',
+    element: PatientBookings,
+    isPublic: false,
+    allowedRoles: ['patient'],
+    useLayout: false,
   },
   {
     path: '/patient/bookings/:bookingId/chat',
