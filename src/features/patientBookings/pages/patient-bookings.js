@@ -23,6 +23,21 @@ const statusTone = {
   cancelled: 'error',
 };
 
+const statusLabel = {
+  pending: 'Awaiting review',
+  pending_confirmation: 'Awaiting doctor confirmation',
+  confirmed: 'Confirmed',
+  reschedule_requested: 'New time suggested',
+  completed: 'Completed',
+  cancelled: 'Declined',
+};
+
+const paymentLabel = {
+  paid: 'Paid',
+  pending: 'Payment pending',
+  failed: 'Payment failed',
+};
+
 const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -94,26 +109,16 @@ export function mountPatientBookings(root) {
   }
 
   function renderNotifications() {
-    const items = state.notifications.slice(0, 4);
-    if (items.length === 0) {
+    const unreadCount = state.notifications.filter((n) => !n.is_read).length;
+    if (unreadCount === 0) {
       el.notifications.innerHTML = '';
       return;
     }
+    // Each booking's own status is already shown clearly on its card below,
+    // so this is just a quiet heads-up rather than a duplicate list.
     el.notifications.innerHTML = `
-      <p class="kura-label mb-2">Recent updates</p>
-      <div class="space-y-2">
-        ${items
-          .map(
-            (n) => `
-          <div class="rounded-xl border border-premium-lilac/20 bg-white/70 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-semibold text-premium-purple-plum">${escapeHtml(n.title)}</p>
-              ${!n.is_read ? '<span class="kura-badge">New</span>' : ''}
-            </div>
-            <p class="mt-0.5 text-xs text-premium-purple-plum/60">${escapeHtml(n.message)}</p>
-          </div>`
-          )
-          .join('')}
+      <div class="rounded-xl border border-premium-lilac/25 bg-premium-lilac-light/30 px-4 py-2.5 text-sm text-premium-purple-plum/75">
+        You have ${unreadCount} update${unreadCount === 1 ? '' : 's'} — check the status on each booking below.
       </div>
     `;
   }
@@ -153,8 +158,8 @@ export function mountPatientBookings(root) {
               <p class="truncate text-sm text-premium-purple-plum/60">with ${escapeHtml(booking.doctor_name || 'your doctor')}</p>
             </div>
             <div class="flex flex-shrink-0 flex-wrap gap-1.5">
-              ${badgeHtml(booking.status, tone)}
-              ${badgeHtml(booking.payment_status || 'pending payment', booking.payment_status === 'paid' ? 'success' : 'warning')}
+              ${badgeHtml(statusLabel[booking.status] || booking.status, tone)}
+              ${badgeHtml(paymentLabel[booking.payment_status] || 'Payment pending', booking.payment_status === 'paid' ? 'success' : 'warning')}
             </div>
           </div>
           ${booking.reason ? `<p class="mt-2 text-sm text-premium-purple-plum/70">${escapeHtml(booking.reason)}</p>` : ''}
