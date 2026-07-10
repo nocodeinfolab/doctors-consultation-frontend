@@ -9,6 +9,11 @@
 
 import { cancelMyBooking, createPayment, getMyBookings, getMyNotifications } from '../../../services/api';
 
+// Payment collection is not live yet on the backend (POST /payments isn't
+// implemented). Flip this to true once Paystack is wired up server-side —
+// nothing else in this file needs to change.
+const PAYMENTS_ENABLED = false;
+
 const statusTone = {
   pending: 'warning',
   pending_confirmation: 'warning',
@@ -135,9 +140,9 @@ export function mountPatientBookings(root) {
       .map((booking) => {
         const tone = statusTone[booking.status] || 'premium';
         const busy = state.busyId === booking.id;
-        const canPay = booking.payment_status !== 'paid' && !['cancelled', 'completed'].includes(booking.status);
+        const canPay = PAYMENTS_ENABLED && booking.payment_status !== 'paid' && !['cancelled', 'completed'].includes(booking.status);
         const canCancel = ['pending', 'confirmed'].includes(booking.status) && booking.payment_status !== 'paid';
-        const isPaid = booking.payment_status === 'paid';
+        const isPaid = !PAYMENTS_ENABLED || booking.payment_status === 'paid';
         const isCompleted = booking.status === 'completed';
 
         return `
